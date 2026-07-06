@@ -1,55 +1,55 @@
 # Jasmin Android Server
 
-Android phone'u SMS gateway'e ceviren HTTP API + SMPP server uygulamasi.
+Turn your Android phone into an SMS gateway with HTTP API + SMPP server.
 
-Jasmin SMS gateway'in Android karsiligi gibi dusunebilirsiniz - dogrudan telefonunuzdan SMS gonderebilirsiniz.
+Think of it as an Android counterpart to Jasmin SMS gateway - send SMS directly from your phone.
 
-## Ozellikler
+## Features
 
 ### HTTP API
-- `POST /api/send` - Tek SMS gonder
-- `POST /api/send-bulk` - Toplu SMS gonder
-- `GET /api/status` - Sunucu durumu
-- `GET /api/report/{id}` - SMS raporu (report ID ile)
-- `GET /api/reports` - Tum raporlar
-- `GET /api/logs` - SMS loglari
-- `GET /api/info` - Cihaz/SIM/ag bilgisi
-- `GET /api/contacts` - Kisi listesi
-- `POST /api/contacts` - Kisi ekle
-- `DELETE /api/contacts/{phone}` - Kisi sil
+- `POST /api/send` - Send a single SMS
+- `POST /api/send-bulk` - Send bulk SMS
+- `GET /api/status` - Server status
+- `GET /api/report/{id}` - SMS report by report ID
+- `GET /api/reports` - All reports
+- `GET /api/logs` - SMS logs
+- `GET /api/info` - Device/SIM/network info
+- `GET /api/contacts` - Contact list
+- `POST /api/contacts` - Add contact
+- `DELETE /api/contacts/{phone}` - Delete contact
 
 ### SMPP Server
-- `POST /api/smpp/start` - SMPP sunucusunu baslat
-- `POST /api/smpp/stop` - SMPP sunucusunu durdur
-- `GET /api/smpp/status` - SMPP durumu
+- `POST /api/smpp/start` - Start SMPP server
+- `POST /api/smpp/stop` - Stop SMPP server
+- `GET /api/smpp/status` - SMPP status
 
-SMPP server port 2775'te dinler. Varsayilan credentials:
+SMPP server listens on port 2775. Default credentials:
 - systemId: `smsapi`
 - password: `password`
 
-### Desteklenen SMPP Komutlari
+### Supported SMPP Commands
 - `BIND_TRANSMITTER` / `BIND_RECEIVER` / `BIND_TRANSCEIVER`
-- `SUBMIT_SM` - SMS gonder
-- `ENQUIRE_LINK` - Baglanti kontrolu
-- `UNBIND` - Baglantiyi kes
+- `SUBMIT_SM` - Send SMS
+- `ENQUIRE_LINK` - Link keepalive
+- `UNBIND` - Disconnect
 
-## Kurulum
+## Setup
 
-1. Android Studio ile projeyi acin
-2. `minSdk 26+` bir cihaza yukleyin
-3. Uygulamayi acin ve "Server Start" butonuna basin
-4. HTTP API: `http://<telefon-IP>:8080`
-5. SMPP: `<telefon-IP>:2775`
+1. Open the project in Android Studio
+2. Install on a device with `minSdk 26+`
+3. Launch the app and tap "Server Start"
+4. HTTP API: `http://<phone-ip>:8080`
+5. SMPP: `<phone-ip>:2775`
 
-## Ornek: HTTP API ile SMS
+## Example: Send SMS via HTTP API
 
 ```bash
 curl -X POST http://192.168.9.10:8080/api/send \
   -H "Content-Type: application/json" \
-  -d '{"phone":"905441497005","message":"Merhaba Dunya!"}'
+  -d '{"phone":"905441497005","message":"Hello World!"}'
 ```
 
-## Ornek: SMPP Client ile SMS
+## Example: Send SMS via SMPP Client
 
 ```python
 import socket, struct
@@ -67,7 +67,7 @@ sock.sendall(pdu)
 sock.recv(1024)
 
 # SUBMIT_SM
-msg = "Merhaba Dunya!"
+msg = "Hello World!"
 body = (write_cstring('') + b'\x00\x00' + write_cstring('9050000000') +
         b'\x01\x01' + write_cstring('905441497005') +
         b'\x00\x00\x00' + write_cstring('') + write_cstring('') +
@@ -79,31 +79,31 @@ resp = sock.recv(1024)
 sock.close()
 ```
 
-## Rapor Sistemi
+## Report System
 
-Her SMS bir report ID alir (`RPT-XXXXXXXX`). Bu ID ile SMS'in durumunu takip edebilirsiniz:
-- `PENDING` - Gonderiliyor
-- `SENT` - GSM agina verildi
-- `DELIVERED` - Aliciya ulasti
-- `FAILED` - Basarisiz
+Every SMS gets a report ID (`RPT-XXXXXXXX`). Track SMS status with this ID:
+- `PENDING` - Being sent
+- `SENT` - Handed to GSM network
+- `DELIVERED` - Reached the recipient
+- `FAILED` - Failed
 
-## Kisi Sistemi
+## Contact System
 
-Telefon numaralarina isim verebilirsiniz. SMS gonderirken kisi ismi otomatik olarak rapora eklenir.
+Name your phone numbers. Contact names are automatically attached to SMS reports.
 
 ```bash
-# Kisi ekle
+# Add a contact
 curl -X POST http://192.168.9.10:8080/api/contacts \
   -H "Content-Type: application/json" \
-  -d '{"phone":"905441497005","name":"Ahmet","group":"dostlar"}'
+  -d '{"phone":"905441497005","name":"John","group":"friends"}'
 ```
 
-## Gereksinimler
+## Requirements
 
 - Android 8.0+ (API 26)
-- Root erisimi (ag durumu icin)
-- SMS izni
+- Root access (for network status)
+- SMS permission
 
-## Lisans
+## License
 
 MIT
