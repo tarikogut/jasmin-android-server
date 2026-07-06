@@ -377,6 +377,49 @@ class SmppServer(private val context: Context) {
         return "id:$reportId sub:001 dlvrd:0$statusCode submit_date:$timestamp done_date:$timestamp stat:$status err:0 Text:0"
     }
 
+    // Forward incoming SMS to all bound RECEIVER/TRANSCEIVER sessions via DELIVER_SM
+    fun forwardIncomingSms(phone: String, message: String, contactName: String?, dbId: Long) {
+        Thread {
+            try {
+                // Use esmClass 0x00 for regular message (not delivery receipt)
+                // The message is an incoming MO SMS, forwarded as MT to SMPP clients
+                val deliverSm = SmppPdu.buildDeliverSm(
+                    sourceAddr = phone,
+                    destAddr = config.systemId,
+                    message = message.toByteArray(Charsets.UTF_8),
+                    esmClass = 0x00, // Regular message
+                    dataCoding = 0x03, // UTF-8
+                    registeredDelivery = 0x00,
+                    sequenceNumber = sessionCounter.incrementAndGet()
+                )
+
+                var forwarded = 0
+                for ((_, session) in sessions) {
+                    if (session.bound && (session.boundAs == SmppPdu.BIND_RECEIVER || session.boundAs == SmppPdu.BIND_TRANSCEIVER)) {
+                        try {
+                            val output = DataOutputStream(session.socket.getOutputStream())
+                            output.write(deliverSm.toByteArray())
+                            output.flush()
+                            forwarded++
+                            Log.d(TAG, "DELIVER_SM (incoming) sent to ${session.id}: from=$phone")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to forward incoming SMS to ${session.id}", e)
+                        }
+                    }
+                }
+
+                // Mark as forwarded in database
+                if (forwarded > 0) {
+                    SmsSender.db?.markIncomingForwarded(dbId)
+                }
+
+                Log.d(TAG, "Incoming SMS forwarded to $forwarded sessions: from=$phone")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to forward incoming SMS", e)
+            }
+        }.start()
+    }
+
     fun getStatus(): Map<String, Any> = mapOf(
         "running" to isRunning,
         "port" to config.port,

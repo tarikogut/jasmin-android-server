@@ -10,13 +10,18 @@ class SmsDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, D
 
     companion object {
         private const val DB_NAME = "sms_api.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
 
         private const val TABLE_REPORTS = "reports"
         private const val TABLE_CONTACTS = "contacts"
+        private const val TABLE_INCOMING = "incoming_sms"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
+        createTables(db)
+    }
+
+    private fun createTables(db: SQLiteDatabase) {
         db.execSQL("""
             CREATE TABLE $TABLE_REPORTS (
                 report_id TEXT PRIMARY KEY,
@@ -42,16 +47,40 @@ class SmsDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, D
             )
         """)
 
+        db.execSQL("""
+            CREATE TABLE $TABLE_INCOMING (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone TEXT NOT NULL,
+                message TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                contact_name TEXT,
+                forwarded_to_smpp INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+
         db.execSQL("CREATE INDEX idx_reports_phone ON $TABLE_REPORTS(phone)")
         db.execSQL("CREATE INDEX idx_reports_status ON $TABLE_REPORTS(status)")
         db.execSQL("CREATE INDEX idx_reports_timestamp ON $TABLE_REPORTS(timestamp DESC)")
         db.execSQL("CREATE INDEX idx_contacts_group ON $TABLE_CONTACTS(group_name)")
+        db.execSQL("CREATE INDEX idx_incoming_phone ON $TABLE_INCOMING(phone)")
+        db.execSQL("CREATE INDEX idx_incoming_timestamp ON $TABLE_INCOMING(timestamp DESC)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_REPORTS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_CONTACTS")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS $TABLE_INCOMING (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phone TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    contact_name TEXT,
+                    forwarded_to_smpp INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_incoming_phone ON $TABLE_INCOMING(phone)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_incoming_timestamp ON $TABLE_INCOMING(timestamp DESC)")
+        }
     }
 
     // ==================== REPORTS ====================
@@ -255,5 +284,51 @@ class SmsDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, D
             group = cursor.getString(cursor.getColumnIndexOrThrow("group_name")),
             createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at"))
         )
+    }
+
+    // ==================== INCOMING SMS ====================
+
+    fun insertIncomingSms(phone: String, message: String, contactName: String?): Long {
+        val values = ContentValues().apply {
+            put("phone", phone)
+            put("message", message)
+            put("timestamp", System.currentTimeMillis())
+            put("contact_name", contactName)
+            put("forwarded_to_smpp", 0)
+        }
+        return writableDatabase.insert(TABLE_INCOMING, null, values)
+    }
+
+    fun markIncomingForwarded(id: Long) {
+        val values = ContentValues().apply {
+            put("forwarded_to_smpp", 1)
+        }
+        writableDatabase.update(TABLE_INCOMING, values, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun getIncomingSms(limit: Int = 100): List<IncomingSms> {
+        val list = mutableListOf<IncomingSms>()
+        val cursor = readableDatabase.query(
+            TABLE_INCOMING, null, null, null,
+            null, null, "timestamp DESC", limit.toString()
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(IncomingSms(
+                    id = it.getLong(it.getColumnIndexOrThrow("id")),
+                    phone = it.getString(it.getColumnIndexOrThrow("phone")),
+                    message = it.getString(it.getColumnIndexOrThrow("message")),
+                    timestamp = it.getLong(it.getColumnIndexOrThrow("timestamp")),
+                    contactName = it.getString(it.getColumnIndexOrThrow("contact_name")),
+                    forwardedToSmpp = it.getInt(it.getColumnIndexOrThrow("forwarded_to_smpp")) == 1
+                ))
+            }
+        }
+        return list
+    }
+
+    fun getIncomingCount(): Int {
+        val cursor = readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE_INCOMING", null)
+        return cursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
     }
 }

@@ -175,6 +175,7 @@ class HttpServerService : Service() {
             path == "/api/send" && method == "POST" -> handleSend(body)
             path == "/api/send-bulk" && method == "POST" -> handleSendBulk(body)
             path == "/api/logs" && method == "GET" -> handleLogs()
+            path == "/api/incoming" && method == "GET" -> handleGetIncoming()
             path.startsWith("/api/report/") && method == "GET" -> handleGetReport(path)
             path == "/api/reports" && method == "GET" -> handleGetAllReports()
             path == "/api/contacts" && method == "GET" -> handleGetContacts()
@@ -264,6 +265,14 @@ class HttpServerService : Service() {
     private fun handleLogs(): Triple<Int, String, String> {
         val reports = SmsSender.getAllReports(100)
         return Triple(200, "application/json", gson.toJson(mapOf("logs" to reports)))
+    }
+
+    private fun handleGetIncoming(): Triple<Int, String, String> {
+        val incoming = SmsSender.db?.getIncomingSms(100) ?: emptyList()
+        return Triple(200, "application/json", gson.toJson(mapOf(
+            "incoming" to incoming,
+            "total" to incoming.size
+        )))
     }
 
     private fun handleInfo(): Triple<Int, String, String> {
