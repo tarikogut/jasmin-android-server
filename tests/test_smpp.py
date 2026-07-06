@@ -32,13 +32,27 @@ def read_cstring(data, offset):
     return data[offset:end].decode('ascii', errors='replace'), end + 1
 
 
-def recv_full(sock, size=1024):
+def recv_full(sock, max_size=1024):
+    """Read SMPP PDU: first 4 bytes = length, then read remaining."""
     data = b''
-    while len(data) < size:
-        chunk = sock.recv(size - len(data))
+    while len(data) < 4:
+        chunk = sock.recv(4 - len(data))
         if not chunk:
             break
         data += chunk
+
+    if len(data) < 4:
+        return data
+
+    resp_len = struct.unpack('>I', data[:4])[0]
+    resp_len = min(resp_len, max_size)
+
+    while len(data) < resp_len:
+        chunk = sock.recv(resp_len - len(data))
+        if not chunk:
+            break
+        data += chunk
+
     return data
 
 
@@ -323,7 +337,10 @@ def test_deliver_sm():
     pdu = struct.pack('>IIII', 16 + len(body), 0x00000001, 0, 1) + body
     sock.sendall(pdu)
     data = recv_full(sock)
-    _, status = struct.unpack('>II', data[:8])
+    if len(data) >= 16:
+        _, _, status, _ = struct.unpack('>IIII', data[:16])
+    else:
+        status = -1
     assert_test(status == 0, "BIND_RECEIVER success")
 
     # Send SMS via HTTP
