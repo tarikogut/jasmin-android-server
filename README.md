@@ -98,6 +98,38 @@ curl -X POST http://192.168.9.10:8080/api/contacts \
   -d '{"phone":"905441497005","name":"John","group":"friends"}'
 ```
 
+## Remote Access via Tailscale
+
+Install [Tailscale](https://tailscale.com) on both your phone and your computer for secure remote access without port forwarding.
+
+### Setup
+
+1. Install Tailscale from Play Store on your Android phone
+2. Install Tailscale on your computer
+3. Log in with the same account on both devices
+4. Find your phone's Tailscale IP: run `tailscale status` on your computer
+
+### Usage
+
+Once connected, use the Tailscale IP instead of local IP:
+
+```bash
+# HTTP API
+curl -X POST http://<tailscale-ip>:8080/api/send \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"905441497005","message":"Hello via Tailscale!"}'
+
+# SMPP (connect from any SMPP client)
+# Host: <tailscale-ip>, Port: 2775
+```
+
+### Benefits
+
+- No port forwarding or firewall rules needed
+- End-to-end encrypted traffic
+- Works from anywhere (phone on mobile data, computer on any network)
+- Static IPs per device (no dynamic DNS needed)
+
 ## Requirements
 
 - Android 8.0+ (API 26)
