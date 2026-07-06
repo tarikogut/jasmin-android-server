@@ -4,6 +4,16 @@ Turn your Android phone into an SMS gateway with HTTP API + SMPP server.
 
 Think of it as an Android counterpart to Jasmin SMS gateway - send SMS directly from your phone.
 
+## Screenshots
+
+| App UI (Stopped) | App UI (Running) |
+|:---:|:---:|
+| ![Stopped](screenshots/01_main_screen.png) | ![Running](screenshots/02_server_running.png) |
+
+| Logs & Reports | DELIVERED Status |
+|:---:|:---:|
+| ![Logs](screenshots/03_logs.png) | ![DELIVERED](screenshots/04_delivered.png) |
+
 ## Features
 
 ### HTTP API
@@ -14,6 +24,7 @@ Think of it as an Android counterpart to Jasmin SMS gateway - send SMS directly 
 - `GET /api/reports` - All reports
 - `GET /api/logs` - SMS logs
 - `GET /api/info` - Device/SIM/network info
+- `GET /api/incoming` - Incoming SMS history
 - `GET /api/contacts` - Contact list
 - `POST /api/contacts` - Add contact
 - `DELETE /api/contacts/{phone}` - Delete contact
@@ -44,7 +55,17 @@ SMPP server listens on port 2775. Default credentials:
 - **Long SMS**: Multipart/concatenated SMS reassembly (UDH parsing)
 - **Data Coding**: GSM 7bit, IA5/ASCII, UCS2, UTF-8, Latin
 - **Delivery Reports**: DELIVER_SM sent to bound RECEIVER/TRANSCEIVER sessions
+- **Incoming SMS**: SMS_RECEIVED forwarded to SMPP clients via DELIVER_SM
 - **Contact Names**: Auto-linked to SMS reports from contacts database
+
+## Incoming SMS
+
+When the phone receives an SMS, it is:
+1. Stored in SQLite database (`incoming_sms` table)
+2. Forwarded to all bound SMPP RECEIVER/TRANSCEIVER sessions via `DELIVER_SM`
+3. Available via `GET /api/incoming`
+
+Any SMPP client bound as RECEIVER or TRANSCEIVER will receive incoming SMS in real-time.
 
 ## Setup
 
