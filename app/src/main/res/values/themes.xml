@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SmsApiApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#0f3460</item>
+        <item name="colorPrimaryVariant">#16213e</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <item name="colorSecondary">#e94560</item>
+        <item name="colorSecondaryVariant">#e94560</item>
+        <item name="colorOnSecondary">#ffffff</item>
+        <item name="android:statusBarColor">#0a0a1a</item>
+        <item name="android:navigationBarColor">#0a0a1a</item>
+        <item name="android:windowBackground">#1a1a2e</item>
+    </style>
+</resources>
