@@ -30,8 +30,21 @@ SMPP server listens on port 2775. Default credentials:
 ### Supported SMPP Commands
 - `BIND_TRANSMITTER` / `BIND_RECEIVER` / `BIND_TRANSCEIVER`
 - `SUBMIT_SM` - Send SMS
+- `DELIVER_SM` - Delivery reports (receipts sent back to receiver sessions)
 - `ENQUIRE_LINK` - Link keepalive
 - `UNBIND` - Disconnect
+- `GENERIC_NACK` - Negative acknowledgement
+
+### SMPP Protocol Support
+- **SMPP v3.4** (interface_version 0x34)
+- **SMPP v5.0** (interface_version 0x50)
+- **TLV Optional Parameters** (message_payload, sc_interface_version, etc.)
+
+### SMPP Features
+- **Long SMS**: Multipart/concatenated SMS reassembly (UDH parsing)
+- **Data Coding**: GSM 7bit, IA5/ASCII, UCS2, UTF-8, Latin
+- **Delivery Reports**: DELIVER_SM sent to bound RECEIVER/TRANSCEIVER sessions
+- **Contact Names**: Auto-linked to SMS reports from contacts database
 
 ## Setup
 

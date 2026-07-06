@@ -59,7 +59,9 @@ data class ReportEntry(
     val errorCode: Int? = null,
     val timestamp: Long,
     val sentAt: Long? = null,
-    val deliveredAt: Long? = null
+    val deliveredAt: Long? = null,
+    val smppMessageId: String? = null,
+    val smppSessionId: String? = null
 )
 
 object SmsSender {
@@ -69,10 +71,16 @@ object SmsSender {
     private val reportById = ConcurrentHashMap<String, ReportEntry>()
     private val reportByPhoneSentId = ConcurrentHashMap<Int, String>()
 
+    // SMPP mapping: reportId -> (messageId, sessionId)
+    private val smppMapping = ConcurrentHashMap<String, Pair<String, String>>()
+
     var sentCount = 0
         private set
     var failedCount = 0
         private set
+
+    // Reference to SMPP server for DELIVER_SM callbacks
+    var smppServer: SmppServer? = null
 
     fun sendSms(context: Context, request: SmsRequest): SmsResponse {
         val reportId = "RPT-${UUID.randomUUID().toString().take(8).uppercase()}"
@@ -166,6 +174,20 @@ object SmsSender {
             .take(limit)
     }
 
+    fun setSmppMessageId(reportId: String, messageId: String, sessionId: String) {
+        smppMapping[reportId] = Pair(messageId, sessionId)
+        // Update report with SMPP info
+        val entry = reportById[reportId]
+        if (entry != null) {
+            reportById[reportId] = entry.copy(
+                smppMessageId = messageId,
+                smppSessionId = sessionId
+            )
+        }
+    }
+
+    fun getSmppMapping(reportId: String): Pair<String, String>? = smppMapping[reportId]
+
     fun onSmsSent(reportId: String, resultCode: Int) {
         val entry = reportById[reportId] ?: return
         if (resultCode == -1) {
@@ -175,6 +197,9 @@ object SmsSender {
                 sentAt = System.currentTimeMillis()
             )
             Log.d(TAG, "SMS sent: reportId=$reportId, phone=${entry.phone}")
+
+            // Notify SMPP if applicable
+            smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "SENT")
         } else {
             failedCount++
             reportById[reportId] = entry.copy(
@@ -182,6 +207,9 @@ object SmsSender {
                 errorCode = resultCode
             )
             Log.e(TAG, "SMS failed: reportId=$reportId, resultCode=$resultCode")
+
+            // Notify SMPP of failure
+            smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "FAILED")
         }
         pendingSms.remove(reportId.hashCode())
         reportByPhoneSentId.remove(reportId.hashCode())
@@ -194,6 +222,9 @@ object SmsSender {
             deliveredAt = System.currentTimeMillis()
         )
         Log.d(TAG, "SMS delivered: reportId=$reportId")
+
+        // Notify SMPP of delivery
+        smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "DELIVERED")
     }
 
     fun getPendingCount(): Int = pendingSms.size

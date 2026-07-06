@@ -423,6 +423,7 @@ class HttpServerService : Service() {
 
             smppServer = SmppServer(this)
             smppServer?.start(config)
+            SmsSender.smppServer = smppServer
 
             Triple(200, "application/json", gson.toJson(mapOf(
                 "success" to true,
@@ -441,6 +442,7 @@ class HttpServerService : Service() {
     private fun handleSmppStop(): Triple<Int, String, String> {
         return try {
             smppServer?.stop()
+            SmsSender.smppServer = null
             smppServer = null
             Triple(200, "application/json", """{"success":true,"message":"SMPP server stopped"}""")
         } catch (e: Exception) {
