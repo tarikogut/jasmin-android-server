@@ -68,8 +68,6 @@ object SmsSender {
     private const val TAG = "SmsSender"
 
     private val pendingSms = ConcurrentHashMap<Int, SmsRequest>()
-    private val reportById = ConcurrentHashMap<String, ReportEntry>()
-    private val reportByPhoneSentId = ConcurrentHashMap<Int, String>()
 
     // SMPP mapping: reportId -> (messageId, sessionId)
     private val smppMapping = ConcurrentHashMap<String, Pair<String, String>>()
@@ -81,6 +79,18 @@ object SmsSender {
 
     // Reference to SMPP server for DELIVER_SM callbacks
     var smppServer: SmppServer? = null
+
+    // Database reference (set during init)
+    var db: SmsDatabase? = null
+
+    fun init(context: Context) {
+        db = SmsDatabase(context)
+        // Restore counters from DB
+        val counts = db?.getStatusCounts()
+        sentCount = counts?.get("SENT") ?: 0
+        failedCount = counts?.get("FAILED") ?: 0
+        Log.d(TAG, "SmsSender initialized: sent=$sentCount, failed=$failedCount")
+    }
 
     fun sendSms(context: Context, request: SmsRequest): SmsResponse {
         val reportId = "RPT-${UUID.randomUUID().toString().take(8).uppercase()}"
@@ -125,7 +135,7 @@ object SmsSender {
 
             val contactName = ContactsManager.getName(request.phone)
 
-            reportById[reportId] = ReportEntry(
+            val entry = ReportEntry(
                 reportId = reportId,
                 phone = request.phone,
                 contactName = contactName,
@@ -133,6 +143,7 @@ object SmsSender {
                 status = "PENDING",
                 timestamp = System.currentTimeMillis()
             )
+            db?.insertReport(entry)
 
             val parts = smsManager.divideMessage(request.message)
             if (parts.size > 1) {
@@ -152,78 +163,66 @@ object SmsSender {
             }
 
             pendingSms[reportId.hashCode()] = request
-            reportByPhoneSentId[reportId.hashCode()] = reportId
             Log.d(TAG, "SMS queued: reportId=$reportId, phone=${request.phone}")
             SmsResponse(true, "SMS queued for sending", reportId, pendingSms.size)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send SMS", e)
-            val entry = reportById[reportId]
+            val entry = db?.getReport(reportId)
             if (entry != null) {
-                reportById[reportId] = entry.copy(status = "FAILED", errorCode = -1)
+                db?.updateReport(entry.copy(status = "FAILED", errorCode = -1))
             }
             failedCount++
             SmsResponse(false, "Failed: ${e.message}")
         }
     }
 
-    fun getReport(reportId: String): ReportEntry? = reportById[reportId]
+    fun getReport(reportId: String): ReportEntry? = db?.getReport(reportId)
 
-    fun getAllReports(limit: Int = 100): List<ReportEntry> {
-        return reportById.values
-            .sortedByDescending { it.timestamp }
-            .take(limit)
-    }
+    fun getAllReports(limit: Int = 100): List<ReportEntry> = db?.getAllReports(limit) ?: emptyList()
+
+    fun getReportsByStatus(status: String): List<ReportEntry> = db?.getReportsByStatus(status) ?: emptyList()
+
+    fun getReportsByPhone(phone: String): List<ReportEntry> = db?.getReportsByPhone(phone) ?: emptyList()
 
     fun setSmppMessageId(reportId: String, messageId: String, sessionId: String) {
         smppMapping[reportId] = Pair(messageId, sessionId)
-        // Update report with SMPP info
-        val entry = reportById[reportId]
+        val entry = db?.getReport(reportId)
         if (entry != null) {
-            reportById[reportId] = entry.copy(
-                smppMessageId = messageId,
-                smppSessionId = sessionId
-            )
+            db?.updateReport(entry.copy(smppMessageId = messageId, smppSessionId = sessionId))
         }
     }
 
     fun getSmppMapping(reportId: String): Pair<String, String>? = smppMapping[reportId]
 
     fun onSmsSent(reportId: String, resultCode: Int) {
-        val entry = reportById[reportId] ?: return
+        val entry = db?.getReport(reportId) ?: return
         if (resultCode == -1) {
             sentCount++
-            reportById[reportId] = entry.copy(
+            db?.updateReport(entry.copy(
                 status = "SENT",
                 sentAt = System.currentTimeMillis()
-            )
+            ))
             Log.d(TAG, "SMS sent: reportId=$reportId, phone=${entry.phone}")
-
-            // Notify SMPP if applicable
             smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "SENT")
         } else {
             failedCount++
-            reportById[reportId] = entry.copy(
+            db?.updateReport(entry.copy(
                 status = "FAILED",
                 errorCode = resultCode
-            )
+            ))
             Log.e(TAG, "SMS failed: reportId=$reportId, resultCode=$resultCode")
-
-            // Notify SMPP of failure
             smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "FAILED")
         }
         pendingSms.remove(reportId.hashCode())
-        reportByPhoneSentId.remove(reportId.hashCode())
     }
 
     fun onSmsDelivered(reportId: String) {
-        val entry = reportById[reportId] ?: return
-        reportById[reportId] = entry.copy(
+        val entry = db?.getReport(reportId) ?: return
+        db?.updateReport(entry.copy(
             status = "DELIVERED",
             deliveredAt = System.currentTimeMillis()
-        )
+        ))
         Log.d(TAG, "SMS delivered: reportId=$reportId")
-
-        // Notify SMPP of delivery
         smppServer?.sendDeliveryReport(reportId, entry.phone, entry.message, "DELIVERED")
     }
 

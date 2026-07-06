@@ -15,6 +15,7 @@ class SmsApiApp : Application() {
         super.onCreate()
         createNotificationChannel()
         ContactsManager.init(this)
+        SmsSender.init(this)
     }
 
     private fun createNotificationChannel() {

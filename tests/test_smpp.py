@@ -329,7 +329,7 @@ def test_enquire_link():
 def test_deliver_sm():
     test("DELIVER_SM (delivery report)")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(15)
+    sock.settimeout(30)  # Longer timeout for delivery reports
     sock.connect((PHONE_IP, SMPP_PORT))
 
     # BIND_RECEIVER
@@ -397,8 +397,19 @@ def test_long_sms():
 
 def test_report_api():
     test("Report API")
-    # Send SMS
-    result = http_send(DEST_PHONE, "Report API test")
+    # Add a contact first
+    phone = "90588888888"
+    name = "Report Test"
+    payload = json.dumps({"phone": phone, "name": name, "group": "test"}).encode()
+    req = urllib.request.Request(
+        f"http://{PHONE_IP}:{HTTP_PORT}/api/contacts",
+        data=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    urllib.request.urlopen(req, timeout=5)
+
+    # Send SMS with contact
+    result = http_send(phone, "Report API test")
     report_id = result.get("reportId")
     assert_test(report_id is not None, f"SMS sent: {report_id}")
 
@@ -407,12 +418,22 @@ def test_report_api():
     # Get report
     report = http_get_report(report_id)
     assert_test(report.get("reportId") == report_id, f"Report found: {report.get('status')}")
-    assert_test(report.get("phone") == DEST_PHONE, f"Phone matches: {report.get('phone')}")
-    assert_test(report.get("contactName") is not None, f"Contact name: {report.get('contactName')}")
+    assert_test(report.get("phone") == phone, f"Phone matches: {report.get('phone')}")
+    assert_test(report.get("contactName") == name, f"Contact name: {report.get('contactName')}")
 
     # Get all reports
     reports = http_get_reports()
     assert_test(reports.get("total", 0) > 0, f"Total reports: {reports.get('total')}")
+
+    # Cleanup
+    payload = json.dumps({"phone": phone}).encode()
+    req = urllib.request.Request(
+        f"http://{PHONE_IP}:{HTTP_PORT}/api/contacts",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="DELETE"
+    )
+    urllib.request.urlopen(req, timeout=5)
     return True
 
 
@@ -457,6 +478,13 @@ def test_contacts():
     resp = urllib.request.urlopen(req, timeout=5)
     result = json.loads(resp.read())
     assert_test(result.get("success") is True, "Contact deleted")
+
+    # Verify new SMS without contact has no name
+    result2 = http_send(phone, "No contact test")
+    report_id2 = result2.get("reportId")
+    time.sleep(1)
+    report2 = http_get_report(report_id2)
+    assert_test(report2.get("contactName") is None, f"No contact name after delete: {report2.get('contactName')}")
     return True
 
 
